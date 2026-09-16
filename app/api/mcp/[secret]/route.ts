@@ -1,32 +1,6 @@
 import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
-
-// Environment variables (set in Vercel > Project > Settings > Environment Variables):
-//   TELEGRAM_BOT_TOKEN  - from @BotFather
-//   TELEGRAM_CHAT_ID    - the chat the bot should message (your private chat with the bot)
-//   MCP_SECRET          - long random string; the endpoint is /api/mcp/<MCP_SECRET>
-
-const TELEGRAM_API = "https://api.telegram.org";
-
-async function telegram(method: string, body: Record<string, unknown>) {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  if (!token) throw new Error("TELEGRAM_BOT_TOKEN is not set");
-  const res = await fetch(`${TELEGRAM_API}/bot${token}/${method}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const raw = await res.text();
-  let json: { ok?: boolean; description?: string; result?: unknown };
-  try {
-    json = JSON.parse(raw);
-  } catch {
-    // Non-JSON body: an outage page, a proxy, or a network appliance in the way.
-    throw new Error(`Telegram ${method} returned HTTP ${res.status} with a non-JSON body: ${raw.slice(0, 200)}`);
-  }
-  if (!json.ok) throw new Error(`Telegram ${method} failed (HTTP ${res.status}): ${json.description ?? "unknown error"}`);
-  return json.result;
-}
+import { defaultChatId, secretMatches, telegram } from "../../../../lib/telegram";
 
 const mcp = createMcpHandler(
   (server) => {
@@ -45,16 +19,50 @@ const mcp = createMcpHandler(
         }),
       },
       async ({ text, chat_id }) => {
-        const chatId = chat_id ?? process.env.TELEGRAM_CHAT_ID;
-        if (!chatId) throw new Error("TELEGRAM_CHAT_ID is not set");
         const result = (await telegram("sendMessage", {
-          chat_id: chatId,
+          chat_id: chat_id ?? defaultChatId(),
           text,
           disable_web_page_preview: true,
         })) as { message_id?: number };
         return {
           content: [
             { type: "text", text: `Sent to Telegram (message_id ${result.message_id ?? "?"}).` },
+          ],
+        };
+      },
+    );
+
+    server.registerTool(
+      "send_telegram_photo",
+      {
+        title: "Send Telegram photo by URL",
+        description:
+          "Send an image that is already reachable at a public HTTPS URL to Aksels on Telegram. " +
+          "Telegram fetches the URL itself, so this cannot send a local file: to send a screenshot " +
+          "or any file on disk, POST it to /api/photo/<secret> instead.",
+        inputSchema: z.object({
+          photo_url: z.string().url().describe("Public HTTPS URL of the image"),
+          caption: z.string().max(1024).optional().describe("Optional caption"),
+          as_document: z
+            .boolean()
+            .optional()
+            .describe("Send uncompressed, preserving small text (default false)"),
+          chat_id: z
+            .string()
+            .optional()
+            .describe("Override the default chat ID (normally leave empty)"),
+        }),
+      },
+      async ({ photo_url, caption, as_document, chat_id }) => {
+        const asDocument = as_document ?? false;
+        const result = (await telegram(asDocument ? "sendDocument" : "sendPhoto", {
+          chat_id: chat_id ?? defaultChatId(),
+          [asDocument ? "document" : "photo"]: photo_url,
+          ...(caption ? { caption } : {}),
+        })) as { message_id?: number };
+        return {
+          content: [
+            { type: "text", text: `Sent image to Telegram (message_id ${result.message_id ?? "?"}).` },
           ],
         };
       },
@@ -88,13 +96,12 @@ const mcp = createMcpHandler(
       },
     );
   },
-  { serverInfo: { name: "aem-telegram-mcp", version: "1.0.0" } },
+  { serverInfo: { name: "aem-telegram-mcp", version: "1.1.0" } },
 );
 
 function guard(req: Request, ctx: { params: Promise<{ secret: string }> }) {
   return ctx.params.then(({ secret }) => {
-    const expected = process.env.MCP_SECRET;
-    if (!expected || secret !== expected) {
+    if (!secretMatches(secret)) {
       return new Response("Not found", { status: 404 });
     }
     return mcp(req);

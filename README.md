@@ -8,6 +8,28 @@ messages and read your replies.
 - `send_telegram_message(text, chat_id?)` — sends a message to `TELEGRAM_CHAT_ID`.
 - `get_telegram_replies(limit?)` — returns messages you sent the bot in the last 24h
   (default 5, max 20).
+- `send_telegram_photo(photo_url, caption?, as_document?, chat_id?)` — sends an image
+  Telegram can fetch itself. It takes a URL, not a file.
+
+## Sending a screenshot
+
+A screenshot cannot travel through an MCP tool call: base64 in tool arguments costs
+roughly 350 tokens per kilobyte, so a modest PNG would outweigh the conversation
+carrying it. A client that holds the file and can run a shell posts it directly
+instead, and the bot token stays on the server:
+
+```sh
+curl -F photo=@shot.png -F 'caption=captcha on the login page' \
+  https://<project>.vercel.app/api/photo/<MCP_SECRET>
+```
+
+Fields: `photo` (required), `caption`, and `as_document=1` to skip Telegram's
+re-encoding — send screenshots this way, because Telegram recompresses anything sent
+as a photo and that smears small text. Replies come back as JSON with `message_id`;
+a wrong or missing secret returns `404`.
+
+Note that claude.ai conversations have no browser, so the capture step needs a client
+that does — Claude Code, or any script of your own.
 
 ## Deploy
 
