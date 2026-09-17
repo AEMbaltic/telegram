@@ -12,6 +12,25 @@ function botToken(): string {
   return token;
 }
 
+/**
+ * Token for the conversational bot.
+ *
+ * Registering a webhook makes getUpdates return 409 for that bot, which would
+ * break get_telegram_replies. Pointing the chat bot at a second bot from
+ * @BotFather via TELEGRAM_CHAT_BOT_TOKEN keeps both features working on one
+ * deployment. Falling back to the single token is supported, and costs the
+ * replies tool.
+ */
+export function chatBotToken(): string {
+  return process.env.TELEGRAM_CHAT_BOT_TOKEN || botToken();
+}
+
+/** True when the chat bot has a token of its own, leaving getUpdates intact. */
+export function chatBotIsSeparate(): boolean {
+  const chat = process.env.TELEGRAM_CHAT_BOT_TOKEN;
+  return !!chat && chat !== process.env.TELEGRAM_BOT_TOKEN;
+}
+
 export function defaultChatId(): string {
   const chatId = process.env.TELEGRAM_CHAT_ID;
   if (!chatId) throw new Error("TELEGRAM_CHAT_ID is not set");
@@ -38,8 +57,8 @@ async function unwrap(res: Response, method: string): Promise<unknown> {
 }
 
 /** Call a Bot API method with a JSON body. */
-export async function telegram(method: string, body: Record<string, unknown>) {
-  const res = await fetch(`${TELEGRAM_API}/bot${botToken()}/${method}`, {
+export async function telegram(method: string, body: Record<string, unknown>, token?: string) {
+  const res = await fetch(`${TELEGRAM_API}/bot${token ?? botToken()}/${method}`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),

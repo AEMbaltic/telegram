@@ -31,6 +31,44 @@ a wrong or missing secret returns `404`.
 Note that claude.ai conversations have no browser, so the capture step needs a client
 that does — Claude Code, or any script of your own.
 
+## The conversational bot
+
+`POST /api/bot/<MCP_SECRET>` is a Telegram webhook that answers messages with Claude,
+so the bot replies whether or not any machine of yours is awake. The MCP tools above
+are the other direction — Claude reaching you — and need a Claude session running.
+
+Extra environment variables:
+
+| Name | Value |
+| --- | --- |
+| `ANTHROPIC_API_KEY` | from [console.anthropic.com](https://console.anthropic.com) — billed per message, separate from a Claude subscription |
+| `TELEGRAM_CHAT_BOT_TOKEN` | *optional but recommended* — a second bot from @BotFather, see below |
+
+Register the webhook by opening this in a browser (a bare visit only reports; the
+`confirm` is what writes):
+
+```
+https://<project>.vercel.app/api/webhook-setup/<MCP_SECRET>?confirm=1
+```
+
+Add `?remove=1` to undo it.
+
+### Why the second bot token
+
+Registering a webhook makes `getUpdates` return 409 for that bot, so putting the chat
+bot on the same token as the MCP connector breaks `get_telegram_replies`. One token
+cannot do both. Setting `TELEGRAM_CHAT_BOT_TOKEN` to a second bot keeps both features
+on one deployment; the setup endpoint reports which case you are in.
+
+Two other things the handler does deliberately. It answers only `TELEGRAM_CHAT_ID` —
+anyone can find a bot by username and start talking to it, and every answer costs API
+money, so other chats get one refusal and no model call. And it returns `200` before
+calling the model, because Telegram redelivers an update it gets no timely response
+to, which would otherwise mean duplicate replies to every slow answer.
+
+Each message is answered on its own, with no memory of earlier ones; a Telegram reply
+to one of the bot's messages passes that message back as context.
+
 ## Deploy
 
 1. In Vercel, **Add New > Project** and import `AEMbaltic/telegram`. Framework is
