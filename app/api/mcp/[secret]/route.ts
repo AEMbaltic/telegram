@@ -1,5 +1,6 @@
 import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
+import { formatLine, history, markPolled, recordSent } from "../../../../lib/chat";
 import { defaultChatId, secretMatches, telegram } from "../../../../lib/telegram";
 
 const mcp = createMcpHandler(
@@ -23,7 +24,9 @@ const mcp = createMcpHandler(
           chat_id: chat_id ?? defaultChatId(),
           text,
           disable_web_page_preview: true,
-        })) as { message_id?: number };
+        })) as { message_id?: number; date?: number };
+        // Kept so the next Roberts run sees what the bot asked, not only the answer.
+        if (!chat_id) await recordSent(result, text);
         return {
           content: [
             { type: "text", text: `Sent to Telegram (message_id ${result.message_id ?? "?"}).` },
@@ -59,7 +62,8 @@ const mcp = createMcpHandler(
           chat_id: chat_id ?? defaultChatId(),
           [asDocument ? "document" : "photo"]: photo_url,
           ...(caption ? { caption } : {}),
-        })) as { message_id?: number };
+        })) as { message_id?: number; date?: number };
+        if (!chat_id) await recordSent(result, caption ? `[image] ${caption}` : "[image]");
         return {
           content: [
             { type: "text", text: `Sent image to Telegram (message_id ${result.message_id ?? "?"}).` },
@@ -73,30 +77,27 @@ const mcp = createMcpHandler(
       {
         title: "Get recent Telegram replies",
         description:
-          "Fetch the latest messages Aksels sent to the bot (last 24h, up to 20). Use after sending a question to read the answer.",
+          "Fetch the latest messages Aksels sent to the bot (last 24h, up to 20). Use after sending a question to read the answer. " +
+          "Calling it also tells the bot a session is listening: for 10 minutes after, new messages are only saved here " +
+          "instead of starting a new Roberts run, so keep checking while you wait.",
         inputSchema: z.object({
           limit: z.number().int().min(1).max(20).optional().describe("How many messages, default 5"),
         }),
       },
       async ({ limit }) => {
-        const chatId = process.env.TELEGRAM_CHAT_ID;
-        const updates = (await telegram("getUpdates", { limit: 100 })) as Array<{
-          message?: { date: number; text?: string; chat: { id: number }; from?: { first_name?: string } };
-        }>;
+        const [messages] = await Promise.all([history(), markPolled()]);
         const cutoff = Date.now() / 1000 - 24 * 3600;
-        const msgs = updates
-          .map((u) => u.message)
-          .filter((m): m is NonNullable<typeof m> => !!m && !!m.text && m.date >= cutoff)
-          .filter((m) => !chatId || String(m.chat.id) === String(chatId))
+        const msgs = messages
+          .filter((m) => m.from === "aksels" && m.date >= cutoff)
           .slice(-(limit ?? 5))
-          .map((m) => `${new Date(m.date * 1000).toISOString()} ${m.from?.first_name ?? "user"}: ${m.text}`);
+          .map((m) => formatLine(m));
         return {
           content: [{ type: "text", text: msgs.length ? msgs.join("\n") : "No replies in the last 24h." }],
         };
       },
     );
   },
-  { serverInfo: { name: "aem-telegram-mcp", version: "1.1.0" } },
+  { serverInfo: { name: "aem-telegram-mcp", version: "1.2.0" } },
 );
 
 function guard(req: Request, ctx: { params: Promise<{ secret: string }> }) {
