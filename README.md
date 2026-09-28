@@ -7,7 +7,7 @@ messages and read your replies.
 
 - `send_telegram_message(text, chat_id?)` — sends a message to `TELEGRAM_CHAT_ID`.
 - `get_telegram_replies(limit?)` — returns messages you sent the bot in the last 24h
-  (default 5, max 20).
+  (default 5, max 20). Calling it also marks a session as listening; see below.
 - `send_telegram_photo(photo_url, caption?, as_document?, chat_id?)` — sends an image
   Telegram can fetch itself. It takes a URL, not a file.
 
@@ -31,6 +31,45 @@ a wrong or missing secret returns `404`.
 Note that claude.ai conversations have no browser, so the capture step needs a client
 that does — Claude Code, or any script of your own.
 
+## Two-way chat with Roberts
+
+Messaging the bot starts Roberts, a Claude Code routine, so the chat works when no
+Claude session is open. Telegram posts each message to the webhook
+`/api/bot/<MCP_SECRET>`, which:
+
+1. ignores every chat but `TELEGRAM_CHAT_ID`;
+2. saves the message, so `get_telegram_replies` can read it;
+3. if `get_telegram_replies` was called in the last 10 minutes, stops there: a
+   session is already waiting and will read the message itself;
+4. otherwise replies "Roberts is on it." and fires the routine with the new message
+   and the 10 before it, including what the bot sent. If the fire fails (the routine
+   allows 30 starts an hour), it says so in the chat.
+
+A routine run is a Claude Code session under the subscription. Nothing here calls
+the Anthropic API, which bills per message.
+
+Extra environment variables:
+
+| Name | Value |
+| --- | --- |
+| `ROBERTS_FIRE_URL` | the routine's API trigger, `https://api.anthropic.com/v1/claude_code/routines/<trig_id>/fire` |
+| `ROBERTS_FIRE_TOKEN` | the trigger's bearer token |
+| `BLOB_READ_WRITE_TOKEN` | set by Vercel when you connect a **private** Blob store (Storage > Create > Blob) to the project |
+
+**Why a Blob store.** A registered webhook makes Telegram's `getUpdates` return 409,
+so the webhook is the only thing that sees the messages. They go to
+`chat/history.json` (the last 200, both directions) and `get_telegram_replies` reads
+them from there. The time of the last `get_telegram_replies` call is
+`chat/last-poll.txt`.
+
+**Registration is automatic.** On each cold start of a production deployment,
+`instrumentation.ts` checks `getWebhookInfo` and registers the webhook if it points
+anywhere else. Registering it copies what `getUpdates` still holds into the history
+first, then drops the pending updates so old messages do not start Roberts. It
+refuses to register while no Blob store is connected, since `get_telegram_replies`
+would then have nothing to read. Preview deployments never register. Runtime logs
+show the outcome (`Telegram webhook registered` or why not).
+
 ## Deploy
 
 1. In Vercel, **Add New > Project** and import `AEMbaltic/telegram`. Framework is
@@ -46,6 +85,8 @@ that does — Claude Code, or any script of your own.
    | `TELEGRAM_BOT_TOKEN` | token from [@BotFather](https://t.me/BotFather) |
    | `TELEGRAM_CHAT_ID` | your chat ID — message the bot, open `https://api.telegram.org/bot<TOKEN>/getUpdates`, use `result[].message.chat.id` |
    | `MCP_SECRET` | a long random string, e.g. `openssl rand -hex 24` |
+
+   Plus the three for the Roberts chat above.
 
    The variables are read at request time from the deployment's snapshot, so a
    deployment created before they existed will not pick them up. Redeploy after
