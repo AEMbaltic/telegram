@@ -42,7 +42,7 @@ Claude session is open. Telegram posts each message to the webhook
 3. if `get_telegram_replies` was called in the last 10 minutes, stops there: a
    session is already waiting and will read the message itself;
 4. otherwise replies "Roberts is on it." and fires the routine with the new message
-   and the 10 before it, including what the bot sent. If the fire fails (the routine
+   and the 10 before it. If the fire fails (the routine
    allows 30 starts an hour), it says so in the chat.
 
 A routine run is a Claude Code session under the subscription. Nothing here calls
@@ -58,9 +58,17 @@ Extra environment variables:
 
 **Why a Blob store.** A registered webhook makes Telegram's `getUpdates` return 409,
 so the webhook is the only thing that sees the messages. They go to
-`chat/history.json` (the last 200, both directions) and `get_telegram_replies` reads
+`chat/history.json` (the last 200) and `get_telegram_replies` reads
 them from there. The time of the last `get_telegram_replies` call is
 `chat/last-poll.txt`.
+
+**Staying inside Vercel Hobby Blob limits** (2,000 advanced operations a month).
+Nothing calls `list()` and both files have fixed names, so the only advanced
+operations are one `put` per message from Aksels and at most one `put` a minute
+while a session polls `get_telegram_replies`. What the bot sends is deliberately
+not stored, because every Roberts reply and routine reminder would cost a `put`.
+A reply made with Telegram's reply button still passes the quoted bot message
+along.
 
 **Registration is automatic.** On each cold start of a production deployment,
 `instrumentation.ts` checks `getWebhookInfo` and registers the webhook if it points

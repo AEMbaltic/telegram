@@ -1,6 +1,6 @@
 import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
-import { formatLine, history, markPolled, recordSent } from "../../../../lib/chat";
+import { formatLine, history, markPolled } from "../../../../lib/chat";
 import { defaultChatId, secretMatches, telegram } from "../../../../lib/telegram";
 
 const mcp = createMcpHandler(
@@ -24,9 +24,7 @@ const mcp = createMcpHandler(
           chat_id: chat_id ?? defaultChatId(),
           text,
           disable_web_page_preview: true,
-        })) as { message_id?: number; date?: number };
-        // Kept so the next Roberts run sees what the bot asked, not only the answer.
-        if (!chat_id) await recordSent(result, text);
+        })) as { message_id?: number };
         return {
           content: [
             { type: "text", text: `Sent to Telegram (message_id ${result.message_id ?? "?"}).` },
@@ -62,8 +60,7 @@ const mcp = createMcpHandler(
           chat_id: chat_id ?? defaultChatId(),
           [asDocument ? "document" : "photo"]: photo_url,
           ...(caption ? { caption } : {}),
-        })) as { message_id?: number; date?: number };
-        if (!chat_id) await recordSent(result, caption ? `[image] ${caption}` : "[image]");
+        })) as { message_id?: number };
         return {
           content: [
             { type: "text", text: `Sent image to Telegram (message_id ${result.message_id ?? "?"}).` },

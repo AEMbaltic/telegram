@@ -6,6 +6,10 @@ import { BlobNotFoundError, BlobPreconditionFailedError, get, head, put } from "
 // A webhook makes Telegram's getUpdates return 409, so once /api/bot receives the
 // messages nothing else can read them from Telegram. Everything the webhook gets
 // is written here, and get_telegram_replies reads it back.
+//
+// Vercel Hobby allows 2,000 advanced Blob operations (put, list, copy) a month.
+// This never lists and uses two fixed names, so the only advanced operations are
+// one put per message from Aksels and at most one per minute of polling.
 
 const HISTORY = "chat/history.json";
 const LAST_POLL = "chat/last-poll.txt";
@@ -15,11 +19,11 @@ const KEEP = 200;
 export const WAITING_MS = 10 * 60 * 1000;
 
 export type ChatMessage = {
-  /** Telegram message_id. A private chat numbers both directions in one sequence. */
+  /** Telegram message_id. */
   id: number;
   /** Unix seconds, as Telegram reports it. */
   date: number;
-  from: "aksels" | "bot";
+  from: "aksels";
   name?: string;
   text: string;
   /** Text of the bot message he replied to, if he used Telegram's reply. */
@@ -72,23 +76,6 @@ export async function record(
   }
 }
 
-/** Store a message the bot sent. A storage hiccup must not make the send look failed. */
-export async function recordSent(message: { message_id?: number; date?: number }, text: string) {
-  if (!storageConfigured() || message.message_id === undefined) return;
-  try {
-    await record([
-      {
-        id: message.message_id,
-        date: message.date ?? Math.floor(Date.now() / 1000),
-        from: "bot",
-        text,
-      },
-    ]);
-  } catch (err) {
-    console.error("Could not store a sent message:", err);
-  }
-}
-
 export async function lastPolledAt(): Promise<number | null> {
   try {
     return (await head(LAST_POLL)).uploadedAt.getTime();
@@ -118,7 +105,7 @@ export async function sessionWaiting(): Promise<boolean> {
 }
 
 export function formatLine(m: ChatMessage, maxText = Infinity): string {
-  const who = m.from === "bot" ? "Bot" : (m.name ?? "Aksels");
+  const who = m.name ?? "Aksels";
   const text = m.text.length > maxText ? `${m.text.slice(0, maxText)}…` : m.text;
   return `${new Date(m.date * 1000).toISOString()} ${who}: ${text}`;
 }
