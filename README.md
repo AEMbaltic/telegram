@@ -45,6 +45,13 @@ Claude session is open. Telegram posts each message to the webhook
    and the 10 before it. If the fire fails (the routine
    allows 30 starts an hour), it says so in the chat.
 
+**Voice notes** (and audio files and round videos) are transcribed with Groq's
+Whisper (`whisper-large-v3`, no fixed language, since Latvian and English get
+mixed) and the bot answers `Heard: "<transcript>"`. The transcript is then saved as
+`(voice) <transcript>` and goes through the same steps as typed text. Recordings
+over 20 MB or 10 minutes get "Too long - max 10 min."; a failed transcription gets
+a request to try again or type it.
+
 A routine run is a Claude Code session under the subscription. Nothing here calls
 the Anthropic API, which bills per message.
 
@@ -54,6 +61,7 @@ Extra environment variables:
 | --- | --- |
 | `ROBERTS_FIRE_URL` | the routine's API trigger, `https://api.anthropic.com/v1/claude_code/routines/<trig_id>/fire` |
 | `ROBERTS_FIRE_TOKEN` | the trigger's bearer token |
+| `GROQ_API_KEY` | from [console.groq.com](https://console.groq.com), for voice notes |
 | `BLOB_READ_WRITE_TOKEN` | set by Vercel when you connect a **private** Blob store (Storage > Create > Blob) to the project |
 
 **Why a Blob store.** A registered webhook makes Telegram's `getUpdates` return 409,
@@ -94,7 +102,7 @@ show the outcome (`Telegram webhook registered` or why not).
    | `TELEGRAM_CHAT_ID` | your chat ID — message the bot, open `https://api.telegram.org/bot<TOKEN>/getUpdates`, use `result[].message.chat.id` |
    | `MCP_SECRET` | a long random string, e.g. `openssl rand -hex 24` |
 
-   Plus the three for the Roberts chat above.
+   Plus the ones for the Roberts chat above. `.env.example` lists them all, without values.
 
    The variables are read at request time from the deployment's snapshot, so a
    deployment created before they existed will not pick them up. Redeploy after

@@ -48,6 +48,18 @@ export async function telegram(method: string, body: Record<string, unknown>, to
 }
 
 /**
+ * Download a file someone sent the bot. The file URL carries the bot token, so it
+ * never goes into an error message or a log.
+ */
+export async function downloadFile(fileId: string): Promise<{ bytes: Blob; filePath: string }> {
+  const file = (await telegram("getFile", { file_id: fileId })) as { file_path?: string };
+  if (!file.file_path) throw new Error("Telegram getFile returned no file_path");
+  const res = await fetch(`${TELEGRAM_API}/file/bot${botToken()}/${file.file_path}`);
+  if (!res.ok) throw new Error(`Telegram file download failed (HTTP ${res.status})`);
+  return { bytes: await res.blob(), filePath: file.file_path };
+}
+
+/**
  * Upload image bytes to a chat.
  *
  * `asDocument` sends the file uncompressed. Telegram re-encodes anything sent as a
