@@ -6,8 +6,8 @@ import { downloadFile } from "./telegram";
 //   GROQ_API_KEY  from console.groq.com
 
 const GROQ_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
-// No language is set on purpose: Aksels mixes Latvian and English in one note.
-const PROMPT = "Latvian and English. Names: Aksels, Roberts, AEM Baltic, Mandrelekids, Google Ads, Meta, Vercel, Lovable.";
+// English only: auto-detect was mishearing English as other languages (Oct 2026).
+const PROMPT = "English. Names: Aksels, Roberts, AEM Baltic, Mandrelekids, Google Ads, Meta, Vercel, Lovable.";
 
 export const MAX_BYTES = 20 * 1024 * 1024;
 export const MAX_SECONDS = 10 * 60;
@@ -32,6 +32,7 @@ export async function transcribe(r: Recording, kind: "voice" | "audio" | "video_
   const form = new FormData();
   form.append("file", bytes, filename);
   form.append("model", "whisper-large-v3");
+  form.append("language", "en");
   form.append("response_format", "text");
   form.append("temperature", "0");
   form.append("prompt", PROMPT);
