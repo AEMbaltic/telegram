@@ -17,12 +17,12 @@ export async function speak(text: string): Promise<Blob> {
   const res = await fetch(GROQ_TTS_URL, {
     method: "POST",
     headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
-    body: JSON.stringify({ model: MODEL, voice: VOICE, input: text, response_format: "mp3" }),
+    body: JSON.stringify({ model: MODEL, voice: VOICE, input: text, response_format: "wav" }),
     signal: AbortSignal.timeout(20_000),
   });
   if (!res.ok) {
     const body = (await res.text().catch(() => "")).slice(0, 300);
     throw new Error(`Groq speech failed (HTTP ${res.status})${body ? `: ${body}` : ""}`);
   }
-  return new Blob([await res.arrayBuffer()], { type: "audio/mpeg" });
+  return new Blob([await res.arrayBuffer()], { type: "audio/wav" });
 }
