@@ -80,3 +80,12 @@ export async function sendImage(
   const res = await fetch(`${TELEGRAM_API}/bot${botToken()}/${method}`, { method: "POST", body: form });
   return unwrap(res, method) as Promise<{ message_id?: number }>;
 }
+
+/** Upload an audio file (mp3) to a chat as a voice message. */
+export async function sendVoice(bytes: Blob, opts: { chatId?: string } = {}) {
+  const form = new FormData();
+  form.append("chat_id", opts.chatId ?? defaultChatId());
+  form.append("voice", bytes, "roberts.mp3");
+  const res = await fetch(`${TELEGRAM_API}/bot${botToken()}/sendVoice`, { method: "POST", body: form });
+  return unwrap(res, "sendVoice") as Promise<{ message_id?: number }>;
+}

@@ -1,7 +1,8 @@
 import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
 import { formatLine, history, markPolled } from "../../../../lib/chat";
-import { defaultChatId, secretMatches, telegram } from "../../../../lib/telegram";
+import { defaultChatId, secretMatches, sendVoice, telegram } from "../../../../lib/telegram";
+import { MAX_TTS_CHARS, speak } from "../../../../lib/tts";
 
 const mcp = createMcpHandler(
   (server) => {
@@ -70,6 +71,32 @@ const mcp = createMcpHandler(
     );
 
     server.registerTool(
+      "send_telegram_voice",
+      {
+        title: "Send Telegram voice message",
+        description:
+          "Send a spoken voice message to Aksels on Telegram (free Groq text-to-speech, English). " +
+          "Max 200 characters per call, so keep it short or call it once per sentence.",
+        inputSchema: z.object({
+          text: z.string().min(1).max(MAX_TTS_CHARS).describe("What to say"),
+          chat_id: z
+            .string()
+            .optional()
+            .describe("Override the default chat ID (normally leave empty)"),
+        }),
+      },
+      async ({ text, chat_id }) => {
+        const audio = await speak(text);
+        const result = await sendVoice(audio, { chatId: chat_id ?? defaultChatId() });
+        return {
+          content: [
+            { type: "text", text: `Sent voice message to Telegram (message_id ${result.message_id ?? "?"}).` },
+          ],
+        };
+      },
+    );
+
+    server.registerTool(
       "get_telegram_replies",
       {
         title: "Get recent Telegram replies",
@@ -94,7 +121,7 @@ const mcp = createMcpHandler(
       },
     );
   },
-  { serverInfo: { name: "aem-telegram-mcp", version: "1.2.0" } },
+  { serverInfo: { name: "aem-telegram-mcp", version: "1.3.0" } },
 );
 
 function guard(req: Request, ctx: { params: Promise<{ secret: string }> }) {
